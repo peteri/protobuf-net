@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace ProtoBuf
 {
@@ -6,14 +7,21 @@ namespace ProtoBuf
     {
         internal static void Flush()
         {
+#if PLAT_NO_INTERLOCKED
             lock (Pool)
             {
                 for (var i = 0; i < Pool.Length; i++)
                     Pool[i] = null;
             }
-        }
+#else
+            for (int i = 0; i < Pool.Length; i++)
+            {
+                Interlocked.Exchange(ref Pool[i], null); // and drop the old value on the floor
+            }
+#endif
+         }
 
-        private BufferPool() { }
+         private BufferPool() { }
         private const int POOL_SIZE = 20;
         internal const int BUFFER_LENGTH = 1024;
         private static readonly CachedBuffer[] Pool = new CachedBuffer[POOL_SIZE];
@@ -114,7 +122,7 @@ namespace ProtoBuf
                     var tmp = Pool[i];
                     if (tmp == null || !tmp.IsAlive)
                     {
-                        minIndex = 0;
+                        minIndex = i;
                         break;
                     }
                     if (tmp.Size < minSize)
